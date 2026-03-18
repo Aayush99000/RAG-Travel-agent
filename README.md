@@ -161,6 +161,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ---
 
-## **🙋 Author**
+## **🙋 Authors**
 
-**Aayush** — MS Data Science, Northeastern University
+**Aayush** — MS Data Science, Northeastern University.
+**Kaushal** — MS Data Science, Northeastern University
