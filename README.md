@@ -1,4 +1,4 @@
-# **TripCraft 🧳✈️**
+# **NLPilot 🧳✈️**
 
 > An NLP-powered travel planner that converts your preferences — destination, budget, mood, dates, and transport — into a personalized day-by-day itinerary. Built with RAG (Groq + Llama 3 + ChromaDB), semantic mood-to-activity mapping, and real venue data from Yelp API. Supports multi-turn conversational refinement.
 
