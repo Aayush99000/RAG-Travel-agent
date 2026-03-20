@@ -24,6 +24,8 @@ A full 5-day itinerary with morning/afternoon/evening slots, real venue recommen
 
 ## **🧠 NLP Pipeline**
 
+![NLPilot Demo](flow.png)
+
 ```
 User Input (Natural Language / Form)
         ↓
