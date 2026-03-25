@@ -15,10 +15,11 @@ Outputs (written to data/processed/):
 Usage:
   python data/fetch_datasets.py \
       --yelp_dir /path/to/yelp_dataset \
+      --travelplanner_dir /path/to/travelplanner \
       --output_dir data/processed
 
 Requirements:
-  pip install datasets tqdm
+  pip install tqdm
 """
 
 import argparse
@@ -178,46 +179,70 @@ def load_yelp_tips(yelp_dir: Path, output_path: Path, kept_ids: set) -> None:
 # TravelPlanner helpers
 # ---------------------------------------------------------------------------
 
-def load_travelplanner(output_dir: Path) -> None:
+TRAVELPLANNER_FIELDS = [
+    "query",
+    "org",
+    "dest",
+    "days",
+    "local_constraint",
+    "reference_information",
+    "plan",
+    "annotated_plan",
+    "level",
+]
+
+
+def _write_records(rows: list, out_file: Path, label: str) -> None:
+    """Write a list of dicts to a JSONL file, keeping only TRAVELPLANNER_FIELDS."""
+    with out_file.open("w", encoding="utf-8") as fout:
+        for row in tqdm(rows, desc=f"  {label}", unit=" rows"):
+            record = {k: row.get(k) for k in TRAVELPLANNER_FIELDS if k in row}
+            fout.write(json.dumps(record) + "\n")
+    print(f"[TravelPlanner] ✓ {label} → {out_file} ({len(rows):,} rows)")
+
+
+def load_travelplanner(tp_dir: Path, output_dir: Path) -> None:
     """
-    Download the osunlp/TravelPlanner dataset from HuggingFace and save each
-    split as a JSONL file.  Fields kept:
-        query, org, dest, days, local_constraint, reference_information, plan
+    Load TravelPlanner from local .csv and .jsonl files in tp_dir.
+    Each file is treated as one split; the stem of the filename becomes
+    the split name (e.g. train.jsonl → travelplanner_train.jsonl).
+
+    Supported formats: .jsonl, .json, .csv
     """
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        print("[TravelPlanner] `datasets` package not installed. Run: pip install datasets")
+    files = sorted(tp_dir.iterdir())
+    supported = {".jsonl", ".json", ".csv"}
+    found = [f for f in files if f.suffix.lower() in supported]
+
+    if not found:
+        print(f"[TravelPlanner] No .jsonl / .json / .csv files found in {tp_dir}. Skipping.")
         return
 
-    print("[TravelPlanner] Fetching dataset from HuggingFace (osunlp/TravelPlanner) …")
-    try:
-        ds = load_dataset("osunlp/TravelPlanner")
-    except Exception as exc:
-        print(f"[TravelPlanner] Failed to load dataset: {exc}")
-        return
+    for src in found:
+        split_name = src.stem          # e.g. "train", "validation"
+        out_file   = output_dir / f"travelplanner_{split_name}.jsonl"
+        print(f"[TravelPlanner] Loading '{src.name}' …")
 
-    # Fields present in TravelPlanner; gracefully handle missing ones
-    FIELDS_TO_KEEP = [
-        "query",
-        "org",
-        "dest",
-        "days",
-        "local_constraint",
-        "reference_information",
-        "plan",
-        "annotated_plan",
-        "level",
-    ]
+        rows: list = []
 
-    for split_name, split_data in ds.items():
-        out_file = output_dir / f"travelplanner_{split_name}.jsonl"
-        print(f"[TravelPlanner] Writing split '{split_name}' ({len(split_data):,} rows) → {out_file}")
-        with out_file.open("w", encoding="utf-8") as fout:
-            for row in tqdm(split_data, desc=f"  {split_name}", unit=" rows"):
-                record = {k: row.get(k) for k in FIELDS_TO_KEEP if k in row}
-                fout.write(json.dumps(record) + "\n")
-        print(f"[TravelPlanner] ✓ {split_name} saved.")
+        if src.suffix.lower() in {".jsonl", ".json"}:
+            with src.open("r", encoding="utf-8") as fin:
+                for line in fin:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+
+        elif src.suffix.lower() == ".csv":
+            import csv
+            with src.open("r", encoding="utf-8", newline="") as fin:
+                reader = csv.DictReader(fin)
+                for row in reader:
+                    rows.append(row)
+
+        _write_records(rows, out_file, split_name)
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +279,15 @@ def parse_args() -> argparse.Namespace:
         "--skip_yelp",
         action="store_true",
         help="Skip the Yelp dataset entirely.",
+    )
+    parser.add_argument(
+        "--travelplanner_dir",
+        type=str,
+        default=None,
+        help=(
+            "Path to the folder containing local TravelPlanner files "
+            "(.jsonl or .csv). If omitted, the TravelPlanner step is skipped."
+        ),
     )
     parser.add_argument(
         "--skip_travelplanner",
@@ -298,7 +332,13 @@ def main() -> None:
 
     # ── TravelPlanner ──────────────────────────────────────────────────────
     if not args.skip_travelplanner:
-        load_travelplanner(output_dir)
+        if args.travelplanner_dir is None:
+            print(
+                "[TravelPlanner] --travelplanner_dir not provided. Skipping.\n"
+                "                Re-run with:  --travelplanner_dir /path/to/travelplanner\n"
+            )
+        else:
+            load_travelplanner(Path(args.travelplanner_dir), output_dir)
         print()
 
     print("Done. Processed files are in:", output_dir.resolve())
