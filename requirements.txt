@@ -1,7 +1,7 @@
 # LLM & Orchestration
-groq
+ollama
 langchain
-langchain-groq
+langchain-ollama
 langchain-community
 
 # Vector Store
@@ -19,4 +19,3 @@ streamlit
 # Data & Utilities
 tqdm
 python-dotenv
-requests
