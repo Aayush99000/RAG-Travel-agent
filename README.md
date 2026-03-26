@@ -1,9 +1,10 @@
 # **NLPilot 🧳✈️**
 
-> An NLP-powered travel planner that converts your preferences — destination, budget, mood, dates, and transport — into a personalized day-by-day itinerary. Built with RAG (Groq + Llama 3 + ChromaDB), semantic mood-to-activity mapping, and real venue data from Yelp API. Supports multi-turn conversational refinement.
+> An NLP-powered travel planner that converts your preferences — destination, budget, mood, dates, and transport — into a personalized day-by-day itinerary. Built with a fully local RAG pipeline (Ollama + Llama 3 + ChromaDB), semantic mood-to-activity mapping, and real venue data from the Yelp Open Dataset. No API keys required — runs entirely on your machine.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python)
 ![LangChain](https://img.shields.io/badge/LangChain-0.1+-green?style=flat-square)
+![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-black?style=flat-square)
 ![Streamlit](https://img.shields.io/badge/Streamlit-UI-red?style=flat-square&logo=streamlit)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
@@ -11,7 +12,9 @@
 
 ## **📌 Overview**
 
-TripCraft takes the hassle out of travel planning. Instead of spending hours researching places, manually budgeting, and building day schedules — just describe your trip in natural language and TripCraft generates a complete, grounded itinerary tailored to you.
+NLPilot takes the hassle out of travel planning. Instead of spending hours researching places, manually budgeting, and building day schedules — just describe your trip in natural language and NLPilot generates a complete, grounded itinerary tailored to you.
+
+> ⚙️ **Fully Local** — No API keys, no cloud services, no internet required after setup. Every component runs on your machine.
 
 **Example Input:**
 
@@ -20,25 +23,25 @@ TripCraft takes the hassle out of travel planning. Instead of spending hours res
 **Example Output:**
 A full 5-day itinerary with morning/afternoon/evening slots, real venue recommendations, estimated costs per day, and transport suggestions — all within your budget.
 
+![NLPilot Demo](assets/demo.png)
+
 ---
 
 ## **🧠 NLP Pipeline**
 
-![NLPilot Demo](flow.png)
-
 ```
 User Input (Natural Language / Form)
         ↓
-  Slot Filling & NER (spaCy / LLM-based)
+  Slot Filling & NER (spaCy)
   [destination, dates, budget, transport, mood]
         ↓
   Mood-to-Activity Mapping
   [sentence-transformers + cosine similarity]
         ↓
-  RAG Retrieval (ChromaDB + Yelp Fusion API)
-  [real venue data to ground generation]
+  RAG Retrieval (ChromaDB + Yelp Open Dataset)
+  [local vector store — no API needed]
         ↓
-  Itinerary Generation (Groq / Llama 3)
+  Itinerary Generation (Ollama — Llama 3 local)
   [constraint-aware, structured prompting]
         ↓
   Multi-turn Refinement
@@ -53,25 +56,26 @@ User Input (Natural Language / Form)
 
 - 🗓️ **Day-by-day itinerary generation** from natural language or form input
 - 🎭 **Mood-to-activity mapping** — maps vague descriptors like _"chill"_ or _"adventurous"_ to concrete activity categories using sentence embeddings
-- 📍 **Real venue recommendations** grounded via Yelp Fusion / Google Places API
+- 📍 **Real venue recommendations** grounded via Yelp Open Dataset loaded into ChromaDB
 - 💰 **Budget & transport constraint enforcement** — stays within your limits
 - 💬 **Multi-turn refinement** — tweak your plan conversationally (e.g., _"make Day 3 less packed"_)
 - 🔍 **RAG-powered grounding** to minimize hallucinations
+- 🔒 **Fully local** — no API keys, no cloud dependencies
 
 ---
 
 ## **🛠️ Tech Stack**
 
-| **Layer**     | **Tool**              |
-| ------------- | --------------------- |
-| LLM           | Llama 3 via Groq API  |
-| Orchestration | LangChain             |
-| Vector Store  | ChromaDB              |
-| Embeddings    | sentence-transformers |
-| NLP / NER     | spaCy                 |
-| Venue Data    | Yelp Fusion API       |
-| Frontend      | Streamlit             |
-| Language      | Python 3.10+          |
+| **Layer**     | **Tool**                      |
+| ------------- | ----------------------------- |
+| LLM           | Llama 3 via Ollama (local)    |
+| Orchestration | LangChain                     |
+| Vector Store  | ChromaDB (local)              |
+| Embeddings    | sentence-transformers (local) |
+| NLP / NER     | spaCy                         |
+| Venue Data    | Yelp Open Dataset (local)     |
+| Frontend      | Streamlit                     |
+| Language      | Python 3.10+                  |
 
 ---
 
@@ -80,8 +84,8 @@ User Input (Natural Language / Form)
 ### **1. Clone the Repository**
 
 ```bash
-git clone https://github.com/Aayush99000/TripCraft.git
-cd TripCraft
+git clone https://github.com/Aayush99000/NLPilot.git
+cd NLPilot
 ```
 
 ### **2. Create a Virtual Environment**
@@ -97,16 +101,50 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### **4. Set Up Environment Variables**
+### **4. Install Ollama & Pull Llama 3**
 
-Create a `.env` file in the root directory:
-
-```env
-GROQ_API_KEY=your_groq_api_key
-YELP_API_KEY=your_yelp_fusion_api_key
+```bash
+# Install Ollama from https://ollama.com
+# Then pull the model — this is a one-time download (~4.7 GB)
+ollama pull llama3
 ```
 
-### **5. Run the App**
+> 💡 Make sure Ollama is running in the background before starting the app:
+>
+> ```bash
+> ollama serve
+> ```
+
+### **5. Download the Yelp Open Dataset**
+
+- Go to 🔗 [yelp.com/dataset](https://business.yelp.com/data/resources/open-dataset/)
+- Fill in the short form and download the `.tar` file
+- Extract and place the JSON files in `data/raw/yelp/`
+
+### **6. Download TravelPlanner Dataset**
+
+```bash
+# Download directly using wget
+wget -P data/raw/travelplanner/ https://huggingface.co/datasets/osunlp/TravelPlanner/resolve/main/train/train.jsonl
+wget -P data/raw/travelplanner/ https://huggingface.co/datasets/osunlp/TravelPlanner/resolve/main/validation/validation.jsonl
+```
+
+### **7. Preprocess the Datasets**
+
+```bash
+python data/fetch_datasets.py \
+    --yelp_dir data/raw/yelp \
+    --travelplanner_dir data/raw/travelplanner \
+    --output_dir data/processed
+```
+
+### **8. Ingest into ChromaDB**
+
+```bash
+python pipeline/ingest_chromadb.py --data_dir data/processed
+```
+
+### **9. Run the App**
 
 ```bash
 streamlit run app.py
@@ -117,43 +155,49 @@ streamlit run app.py
 ## **📁 Project Structure**
 
 ```
-TripCraft/
-├── app.py                  # Streamlit frontend
+NLPilot/
+├── app.py                        # Streamlit frontend
+├── assets/
+│   └── demo.png                  # Demo image for README
 ├── pipeline/
-│   ├── slot_filler.py      # NER & structured input extraction
-│   ├── mood_mapper.py      # Mood-to-activity semantic mapping
-│   ├── retriever.py        # RAG retrieval from ChromaDB
-│   └── generator.py        # LLM itinerary generation
+│   ├── slot_filler.py            # NER & structured input extraction
+│   ├── mood_mapper.py            # Mood-to-activity semantic mapping
+│   ├── retriever.py              # RAG retrieval from ChromaDB
+│   ├── ingest_chromadb.py        # Loads processed data into ChromaDB
+│   └── generator.py              # Local LLM itinerary generation (Ollama)
 ├── data/
-│   └── venue_data/         # Cached or scraped venue data
-├── vectorstore/            # ChromaDB persistent store
+│   ├── fetch_datasets.py         # Dataset fetching & preprocessing
+│   ├── raw/
+│   │   ├── yelp/                 # Raw Yelp JSON files
+│   │   └── travelplanner/        # Raw TravelPlanner JSONL files
+│   └── processed/                # Cleaned JSONL files ready for ingestion
+├── vectorstore/                  # ChromaDB persistent local vector store
 ├── requirements.txt
-├── .env.example
 └── README.md
 ```
 
 ---
 
+## **⚙️ System Requirements**
+
+| Component | Minimum                 | Recommended   |
+| --------- | ----------------------- | ------------- |
+| RAM       | 8 GB                    | 16 GB         |
+| Storage   | 15 GB free              | 20 GB free    |
+| Python    | 3.10+                   | 3.11+         |
+| OS        | Windows / macOS / Linux | macOS / Linux |
+
+> 💡 Llama 3 8B requires at least 8 GB RAM to run locally via Ollama.
+
+---
+
 ## **📊 Evaluation**
 
-TripCraft is evaluated on:
+NLPilot is evaluated on:
 
 - **Constraint Satisfaction Rate** — how well the itinerary respects budget and transport inputs
 - **BERTScore** — semantic similarity of generated itineraries vs. reference travel blogs
 - **Human Preference Scoring** — user ratings on relevance, coherence, and personalization
-
----
-
-## **🗺️ Roadmap**
-
-- [x] Project proposal & architecture design
-- [ ] Slot filling & input parsing module
-- [ ] Mood-to-activity embedding layer
-- [ ] RAG pipeline with Yelp API integration
-- [ ] Itinerary generation with Groq / Llama 3
-- [ ] Multi-turn refinement
-- [ ] Streamlit UI
-- [ ] Evaluation & final report
 
 ---
 
