@@ -1,0 +1,22 @@
+# LLM & Orchestration
+groq
+langchain
+langchain-groq
+langchain-community
+
+# Vector Store
+chromadb
+
+# Embeddings
+sentence-transformers
+
+# NLP / NER
+spacy
+
+# Frontend
+streamlit
+
+# Data & Utilities
+tqdm
+python-dotenv
+requests
