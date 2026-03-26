@@ -179,6 +179,7 @@ def load_yelp_tips(yelp_dir: Path, output_path: Path, kept_ids: set) -> None:
 # TravelPlanner helpers
 # ---------------------------------------------------------------------------
 
+# Categories that are relevant to travel itinerary planning
 TRAVELPLANNER_FIELDS = [
     "query",
     "org",
