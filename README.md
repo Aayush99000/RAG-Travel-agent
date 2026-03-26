@@ -23,7 +23,7 @@ NLPilot takes the hassle out of travel planning. Instead of spending hours resea
 **Example Output:**
 A full 5-day itinerary with morning/afternoon/evening slots, real venue recommendations, estimated costs per day, and transport suggestions — all within your budget.
 
-![NLPilot Demo](assets/demo.png)
+![NLPilot Demo](flow.png)
 
 ---
 
