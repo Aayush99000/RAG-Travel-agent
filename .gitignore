@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Large dataset files — run data/fetch_datasets.py locally to generate these
+data/processed/
+Yelp JSON/
+TravelPlanner/
+*.jsonl
+*.parquet
