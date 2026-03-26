@@ -212,3 +212,6 @@ Yelp JSON/
 TravelPlanner/
 *.jsonl
 *.parquet
+
+# ChromaDB local vector store — run pipeline/ingest_chromadb.py locally to generate
+vectorstore/
