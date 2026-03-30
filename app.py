@@ -67,9 +67,9 @@ def _render_slots_card(slots: TripSlots):
 
     missing = slots.missing()
     if missing:
-        st.sidebar.warning(f"Missing: {', '.join(missing)}")
+        st.sidebar.warning(f"Still needed: {', '.join(missing)}")
     else:
-        st.sidebar.success("All slots filled!")
+        st.sidebar.success("Trip details complete")
 
 # ---------------------------------------------------------------------------
 # Sidebar

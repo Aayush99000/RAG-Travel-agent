@@ -195,25 +195,13 @@ def retrieve(
     # ── Yelp venues ───────────────────────────────────────────────────────
     venues_col = _safe_get_collection(client, "yelp_venues", ef)
     if venues_col:
-        # Optionally filter by city if the collection has enough data
-        where = None
-        if slots.destination:
-            where = {"city": {"$eq": slots.destination}}
-
-        try:
-            results = venues_col.query(
-                query_texts=[venue_q],
-                n_results=N_VENUES,
-                where=where,
-                include=["documents", "metadatas", "distances"],
-            )
-        except Exception:
-            # City filter may fail if no matches — fall back to pure semantic search
-            results = venues_col.query(
-                query_texts=[venue_q],
-                n_results=N_VENUES,
-                include=["documents", "metadatas", "distances"],
-            )
+        # Use pure semantic search — city name is embedded in the query text
+        # so relevant venues will naturally rank higher without strict filtering
+        results = venues_col.query(
+            query_texts=[venue_q],
+            n_results=N_VENUES,
+            include=["documents", "metadatas", "distances"],
+        )
 
         docs      = results.get("documents", [[]])[0]
         metadatas = results.get("metadatas", [[]])[0]
@@ -286,23 +274,11 @@ def retrieve(
     # ── TravelPlanner reference plans ─────────────────────────────────────
     tp_col = _safe_get_collection(client, "travelplanner", ef)
     if tp_col:
-        try:
-            where = None
-            if slots.destination:
-                where = {"dest": {"$eq": slots.destination}}
-
-            results = tp_col.query(
-                query_texts=[plan_q],
-                n_results=N_REFERENCE_PLANS,
-                where=where,
-                include=["documents", "metadatas", "distances"],
-            )
-        except Exception:
-            results = tp_col.query(
-                query_texts=[plan_q],
-                n_results=N_REFERENCE_PLANS,
-                include=["documents", "metadatas", "distances"],
-            )
+        results = tp_col.query(
+            query_texts=[plan_q],
+            n_results=N_REFERENCE_PLANS,
+            include=["documents", "metadatas", "distances"],
+        )
 
         docs      = results.get("documents", [[]])[0]
         metadatas = results.get("metadatas", [[]])[0]
