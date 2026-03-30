@@ -203,6 +203,13 @@ def _extract_budget(text: str, doc) -> float | None:
       - spaCy MONEY entities
       - regex: "$2,000", "2000 dollars", "USD 1500", "1.5k"
     """
+    text_lower = text.lower()
+
+    # "1.5k" or "2k" — check BEFORE spaCy MONEY to avoid "$1.5" capturing before "k"
+    m = re.search(r"\$?([\d.]+)\s*k\b", text_lower)
+    if m:
+        return float(m.group(1)) * 1000
+
     # spaCy MONEY
     for ent in doc.ents:
         if ent.label_ == "MONEY":
@@ -211,8 +218,6 @@ def _extract_budget(text: str, doc) -> float | None:
                 return float(raw)
             except ValueError:
                 continue
-
-    text_lower = text.lower()
 
     # $1,500 or $1500
     m = re.search(r"\$([\d,]+(?:\.\d+)?)", text)
@@ -223,11 +228,6 @@ def _extract_budget(text: str, doc) -> float | None:
     m = re.search(r"([\d,]+(?:\.\d+)?)\s*(?:dollars?|usd|bucks?)", text_lower)
     if m:
         return float(m.group(1).replace(",", ""))
-
-    # "1.5k" or "2k"
-    m = re.search(r"([\d.]+)\s*k\b", text_lower)
-    if m:
-        return float(m.group(1)) * 1000
 
     return None
 
@@ -263,7 +263,7 @@ def _extract_start_date(doc) -> str | None:
         if ent.label_ == "DATE":
             text = ent.text.lower()
             # Skip vague durations like "5 days", "a week"
-            if re.search(r"\d+\s*days?|\d+\s*weeks?|a week", text):
+            if re.search(r"\d+\s*-?\s*days?|\d+\s*weeks?|a week|weekend", text):
                 continue
             return ent.text
     return None
