@@ -29,7 +29,7 @@ from pipeline.retriever   import RetrievedContext
 OLLAMA_MODEL    = "qwen3:1.7b"
 OLLAMA_BASE_URL = "http://localhost:11434"
 TEMPERATURE     = 0.7        # slight creativity for itinerary variety
-MAX_TOKENS      = 3500
+MAX_TOKENS      = 8000       # enough for a complete 7-day itinerary
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ TRIP DETAILS:
 - Mood/Vibe    : {moods_str}
 
 RULES YOU MUST FOLLOW:
-1. Generate exactly {days_str} days of activities.
+1. Generate ALL {days_str} days — do NOT stop early or cut the itinerary short. Every single day must be fully written out.
 2. Each day must have Morning, Afternoon, and Evening slots.
 3. ALL venues and activities MUST be located in {dest_str}. Do NOT include venues from other cities.
 4. If a venue has free entry, still estimate realistic costs for food, drinks, or transport at that stop (minimum $10-$20 per activity).
