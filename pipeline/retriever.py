@@ -195,13 +195,28 @@ def retrieve(
     # ── Yelp venues ───────────────────────────────────────────────────────
     venues_col = _safe_get_collection(client, "yelp_venues", ef)
     if venues_col:
-        # Use pure semantic search — city name is embedded in the query text
-        # so relevant venues will naturally rank higher without strict filtering
-        results = venues_col.query(
-            query_texts=[venue_q],
-            n_results=N_VENUES,
-            include=["documents", "metadatas", "distances"],
-        )
+        # Try city-filtered search first, fall back to semantic-only if no results
+        results = None
+        if slots.destination:
+            try:
+                results = venues_col.query(
+                    query_texts=[venue_q],
+                    n_results=N_VENUES,
+                    where={"city": {"$eq": slots.destination}},
+                    include=["documents", "metadatas", "distances"],
+                )
+                # If no results with exact city match, try without filter
+                if not results.get("documents", [[]])[0]:
+                    results = None
+            except Exception:
+                results = None
+
+        if results is None:
+            results = venues_col.query(
+                query_texts=[venue_q],
+                n_results=N_VENUES,
+                include=["documents", "metadatas", "distances"],
+            )
 
         docs      = results.get("documents", [[]])[0]
         metadatas = results.get("metadatas", [[]])[0]

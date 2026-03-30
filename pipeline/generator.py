@@ -74,18 +74,20 @@ TRIP DETAILS:
 RULES YOU MUST FOLLOW:
 1. Generate exactly {days_str} days of activities.
 2. Each day must have Morning, Afternoon, and Evening slots.
-3. Only recommend venues from the CONTEXT section below. Do not invent venues.
-4. Respect the total budget — include estimated costs per activity and a daily subtotal.
-5. All transport suggestions must match the preferred mode: {transport_str}.
-6. Keep the vibe consistent with the traveler's mood: {moods_str}.
-7. Be specific — include venue names, neighborhoods, and practical tips.
+3. ALL venues and activities MUST be located in {dest_str}. Do NOT include venues from other cities.
+4. If a venue has free entry, still estimate realistic costs for food, drinks, or transport at that stop (minimum $10-$20 per activity).
+5. Every activity MUST have a non-zero cost estimate — include food, drinks, transport fares, tips, and entry fees.
+6. Daily subtotal MUST be the sum of all activity costs for that day. Never write $0.
+7. Grand total MUST equal the sum of all daily subtotals and must be close to {budget_str}.
+8. Transport suggestions must match: {transport_str}.
+9. Keep the vibe consistent with: {moods_str}.
 
 OUTPUT FORMAT (follow exactly):
 ---
 ## Day 1: [Theme]
 **Morning**
-- [Activity] at [Venue Name] — [brief description] (~$[cost])
-- [Transport tip]
+- [Activity] at [Venue Name] — [brief description] (~$[cost for food/entry/drinks])
+- Transport: [specific transport tip with estimated fare]
 
 **Afternoon**
 - [Activity] at [Venue Name] — [brief description] (~$[cost])
@@ -93,12 +95,12 @@ OUTPUT FORMAT (follow exactly):
 **Evening**
 - [Activity] at [Venue Name] — [brief description] (~$[cost])
 
-Daily Estimated Cost: ~$[total]
+**Daily Subtotal: ~$[sum of all costs above]**
 
 ---
 (repeat for each day)
 
-TOTAL ESTIMATED COST: ~$[grand total]
+**TOTAL ESTIMATED COST: ~$[sum of all daily subtotals]**
 TIPS: [2-3 practical travel tips for this trip]
 """
 
