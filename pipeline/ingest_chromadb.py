@@ -4,12 +4,6 @@ ingest_chromadb.py
 Reads processed JSONL files from data/processed/ and ingests them into
 a local ChromaDB vector store under vectorstore/.
 
-Collections created:
-  - yelp_venues    : one doc per venue  (name + city + categories + attributes)
-  - yelp_reviews   : one doc per review (text + stars)
-  - yelp_tips      : one doc per tip    (short venue notes)
-  - travelplanner  : one doc per entry  (query + reference_information)
-
 Embeddings are generated locally using sentence-transformers
 (all-MiniLM-L6-v2 by default — fast and memory-efficient).
 
@@ -32,7 +26,7 @@ from tqdm import tqdm
 # Config
 # ---------------------------------------------------------------------------
 
-EMBEDDING_MODEL  = "all-MiniLM-L6-v2"   # local, ~80 MB, no internet after first download
+EMBEDDING_MODEL  = "all-MiniLM-L6-v2"   
 VECTORSTORE_DIR  = "vectorstore"
 BATCH_SIZE       = 256                   # ChromaDB add() batch size
 
