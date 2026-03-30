@@ -33,99 +33,6 @@ MAX_TOKENS      = 8000       # enough for a complete 7-day itinerary
 
 
 # ---------------------------------------------------------------------------
-# City transport resources
-# Curated list of local cab, rideshare, and car rental options per city.
-# The model injects these into the itinerary's transport tips.
-# ---------------------------------------------------------------------------
-
-CITY_TRANSPORT: dict[str, dict] = {
-    "new york": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com"), ("Via", "ridewithvia.com")],
-        "taxi":      [("NYC Taxi", "nyc.gov/taxi"), ("Curb", "gocurb.com")],
-        "car_rental":[("Hertz", "hertz.com"), ("Enterprise", "enterprise.com"), ("Zipcar", "zipcar.com")],
-    },
-    "miami": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("Miami Taxi", "miamidade.gov"), ("Yellow Cab Miami", "yellowcabmiami.com")],
-        "car_rental":[("Avis", "avis.com"), ("Budget", "budget.com"), ("Hertz", "hertz.com")],
-    },
-    "los angeles": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("LA Taxi", "taxicabsla.org"), ("Yellow Cab LA", "layellowcab.com")],
-        "car_rental":[("Enterprise", "enterprise.com"), ("Alamo", "alamo.com"), ("Turo", "turo.com")],
-    },
-    "chicago": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("Chicago Taxi", "cityofchicago.org"), ("Flash Cab", "flashcab.com")],
-        "car_rental":[("Hertz", "hertz.com"), ("Budget", "budget.com"), ("Enterprise", "enterprise.com")],
-    },
-    "san francisco": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com"), ("Waymo", "waymo.com")],
-        "taxi":      [("Flywheel", "flywheel.com"), ("SF Taxi", "sftaxi.com")],
-        "car_rental":[("Enterprise", "enterprise.com"), ("Zipcar", "zipcar.com"), ("Turo", "turo.com")],
-    },
-    "new orleans": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("United Cabs", "unitedcabs.com"), ("NO Taxi", "notaxi.com")],
-        "car_rental":[("Hertz", "hertz.com"), ("Avis", "avis.com"), ("Enterprise", "enterprise.com")],
-    },
-    "las vegas": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("Desert Cab", "desertcab.com"), ("Vegas Taxi", "vegascab.com")],
-        "car_rental":[("Alamo", "alamo.com"), ("Budget", "budget.com"), ("Hertz", "hertz.com")],
-    },
-    "boston": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("Boston Cab", "bostoncab.us"), ("Metro Cab", "boston-cab.com")],
-        "car_rental":[("Enterprise", "enterprise.com"), ("Zipcar", "zipcar.com"), ("Hertz", "hertz.com")],
-    },
-    "seattle": {
-        "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-        "taxi":      [("Yellow Cab Seattle", "yellowcabseattle.com"), ("Orange Cab", "orangecab.net")],
-        "car_rental":[("Enterprise", "enterprise.com"), ("Budget", "budget.com"), ("Turo", "turo.com")],
-    },
-    "tokyo": {
-        "rideshare": [("Uber Japan", "uber.com/ja-JP"), ("GO Taxi", "go.mo-t.com")],
-        "taxi":      [("Nihon Kotsu", "nihon-kotsu.co.jp"), ("Tokyo MK Taxi", "tokyomk.com")],
-        "car_rental":[("Toyota Rent a Car", "rent.toyota.co.jp"), ("Times Car", "timescar.jp")],
-    },
-}
-
-# Fallback for cities not in the dictionary
-_DEFAULT_TRANSPORT = {
-    "rideshare": [("Uber", "uber.com"), ("Lyft", "lyft.com")],
-    "taxi":      [("Local Taxi", "")],
-    "car_rental":[("Enterprise", "enterprise.com"), ("Hertz", "hertz.com"), ("Avis", "avis.com")],
-}
-
-
-def _get_transport_resources(destination: str | None) -> str:
-    """Return a formatted string of transport options for the destination city."""
-    if not destination:
-        return ""
-    key     = destination.lower().strip()
-    options = CITY_TRANSPORT.get(key, _DEFAULT_TRANSPORT)
-
-    lines = ["LOCAL TRANSPORT & CAB BOOKING RESOURCES:"]
-    if options.get("rideshare"):
-        lines.append("  Ride-share : " + " | ".join(
-            f"{name} (www.{url})" if url else name
-            for name, url in options["rideshare"]
-        ))
-    if options.get("taxi"):
-        lines.append("  Local Taxis: " + " | ".join(
-            f"{name} (www.{url})" if url else name
-            for name, url in options["taxi"]
-        ))
-    if options.get("car_rental"):
-        lines.append("  Car Rentals: " + " | ".join(
-            f"{name} (www.{url})" if url else name
-            for name, url in options["car_rental"]
-        ))
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # Result container
 # ---------------------------------------------------------------------------
 
@@ -154,8 +61,6 @@ def _build_system_prompt(slots: TripSlots) -> str:
     days_str      = str(slots.days) if slots.days else "a few"
     dest_str      = slots.destination or "the destination"
 
-    transport_resources = _get_transport_resources(slots.destination)
-
     return f"""You are NLPilot, an expert travel planner. Your job is to create a detailed, \
 day-by-day travel itinerary that is grounded in real venue data.
 
@@ -166,8 +71,6 @@ TRIP DETAILS:
 - Transport    : {transport_str}
 - Mood/Vibe    : {moods_str}
 
-{transport_resources}
-
 RULES YOU MUST FOLLOW:
 1. Generate ALL {days_str} days — do NOT stop early or cut the itinerary short. Every single day must be fully written out.
 2. Each day must have Morning, Afternoon, and Evening slots.
@@ -176,7 +79,7 @@ RULES YOU MUST FOLLOW:
 5. Every activity MUST have a non-zero cost estimate — include food, drinks, transport fares, tips, and entry fees.
 6. Daily subtotal MUST be the sum of all activity costs for that day. Never write $0.
 7. Grand total MUST equal the sum of all daily subtotals and must be close to {budget_str}.
-8. Transport suggestions must match: {transport_str}. Reference the LOCAL TRANSPORT & CAB BOOKING RESOURCES above — mention specific company names and their websites in transport tips.
+8. Transport suggestions must match: {transport_str}.
 9. Keep the vibe consistent with: {moods_str}.
 
 OUTPUT FORMAT (follow exactly):
@@ -200,9 +103,6 @@ OUTPUT FORMAT (follow exactly):
 **TOTAL ESTIMATED COST: ~$[sum of all daily subtotals]**
 
 TIPS: [2-3 practical travel tips for this trip]
-
-### Getting Around — Local Transport & Cab Booking
-[List the ride-share, taxi, and car rental options from LOCAL TRANSPORT RESOURCES above with their website links]
 """
 
 
