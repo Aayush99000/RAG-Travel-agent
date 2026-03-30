@@ -92,7 +92,7 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.caption("Powered by Qwen 3.5 · Ollama · ChromaDB · spaCy")
+    st.caption("Powered by Qwen 3 (1.7b) · Ollama · ChromaDB · spaCy")
 
 # ---------------------------------------------------------------------------
 # Main area — header
@@ -170,7 +170,7 @@ if st.session_state["phase"] == "input":
                     venue_msg = "Vector store not found — generating without RAG context."
 
             # Step 4: Generate itinerary
-            with st.spinner(f"Generating your {slots.days}-day itinerary with Qwen 3.5…"):
+            with st.spinner(f"Generating your {slots.days}-day itinerary with Qwen 3 (1.7b)…"):
                 try:
                     if context:
                         result = generate_itinerary(slots, context)

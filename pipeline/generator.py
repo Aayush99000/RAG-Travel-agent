@@ -26,7 +26,7 @@ from pipeline.retriever   import RetrievedContext
 # Config
 # ---------------------------------------------------------------------------
 
-OLLAMA_MODEL    = "qwen3.5"
+OLLAMA_MODEL    = "qwen3:1.7b"
 OLLAMA_BASE_URL = "http://localhost:11434"
 TEMPERATURE     = 0.7        # slight creativity for itinerary variety
 MAX_TOKENS      = 2048
