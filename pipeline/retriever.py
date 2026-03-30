@@ -33,10 +33,10 @@ VECTORSTORE_DIR  = "vectorstore"
 EMBEDDING_MODEL  = "all-MiniLM-L6-v2"
 
 # How many results to pull from each collection
-N_VENUES         = 15
-N_REVIEWS        = 10
-N_TIPS           = 10
-N_REFERENCE_PLANS = 3
+N_VENUES         = 8
+N_REVIEWS        = 5
+N_TIPS           = 5
+N_REFERENCE_PLANS = 2
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ class RetrievedContext:
             for r in self.reviews:
                 meta = r.get("metadata", {})
                 stars = meta.get("stars", "?")
-                text  = r.get("document", "")[:300]   # truncate long reviews
+                text  = r.get("document", "")[:150]   # truncate long reviews
                 lines.append(f"• [{stars}★] {text}")
             sections.append("\n".join(lines))
 
