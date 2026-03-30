@@ -71,29 +71,35 @@ TRIP DETAILS:
 - Transport    : {transport_str}
 - Mood/Vibe    : {moods_str}
 
+CRITICAL TRANSPORT RULES:
+- The origin city ({slots.origin or "origin"}) is ONLY where the traveler is flying FROM. It is NOT part of the itinerary.
+- NEVER suggest transport between {slots.origin or "origin"} and {dest_str} inside the daily activities. That is a flight handled separately.
+- Transport tips in each day MUST only describe LOCAL travel within {dest_str} (e.g. metro, bus, taxi, walking — all within the destination city only).
+- NEVER write things like "Metro from [origin] to [destination]" or "Flight from X to Y" inside daily activities.
+
 RULES YOU MUST FOLLOW:
 1. Generate ALL {days_str} days — do NOT stop early or cut the itinerary short. Every single day must be fully written out.
 2. Each day must have Morning, Afternoon, and Evening slots.
 3. ALL venues and activities MUST be located in {dest_str}. Do NOT include venues from other cities.
-4. If a venue has free entry, still estimate realistic costs for food, drinks, or transport at that stop (minimum $10-$20 per activity).
-5. Every activity MUST have a non-zero cost estimate — include food, drinks, transport fares, tips, and entry fees.
+4. If a venue has free entry, still estimate realistic costs for food, drinks, or local transport (~$5-15 per ride within the city).
+5. Every activity MUST have a non-zero cost estimate — include food, drinks, local transport fares, tips, and entry fees.
 6. Daily subtotal MUST be the sum of all activity costs for that day. Never write $0.
 7. Grand total MUST equal the sum of all daily subtotals and must be close to {budget_str}.
-8. Transport suggestions must match: {transport_str}.
+8. Local transport mode within {dest_str} must match: {transport_str}.
 9. Keep the vibe consistent with: {moods_str}.
 
 OUTPUT FORMAT (follow exactly):
 ---
 ## Day 1: [Theme]
 **Morning**
-- [Activity] at [Venue Name] — [brief description] (~$[cost for food/entry/drinks])
-- Transport: [specific transport tip with estimated fare]
+- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
+- Local Transport: [how to get there within {dest_str} only] (~$[fare])
 
 **Afternoon**
-- [Activity] at [Venue Name] — [brief description] (~$[cost])
+- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
 
 **Evening**
-- [Activity] at [Venue Name] — [brief description] (~$[cost])
+- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
 
 **Daily Subtotal: ~$[sum of all costs above]**
 
