@@ -83,7 +83,7 @@ MOOD_KEYWORDS: list[str] = [
 ]
 
 # Text fragments that hint a city is the ORIGIN (not destination)
-ORIGIN_CUES = {"from", "departing", "leaving", "flying from", "traveling from", "starting from"}
+ORIGIN_CUES = {"from", "form", "fron", "departing", "leaving", "flying from", "traveling from", "starting from"}
 
 # Text fragments that hint a city is the DESTINATION
 DEST_CUES   = {"to", "in", "visit", "visiting", "going to", "heading to", "traveling to", "trip to", "explore"}
@@ -140,27 +140,37 @@ def _extract_cities(doc) -> tuple[str | None, str | None]:
     Use spaCy GPE/LOC entities + surrounding prepositions to decide
     which city is origin and which is destination.
     """
-    origin      = None
-    destination = None
+    origin           = None
+    destination      = None
+    dest_by_fallback = False   # track if destination was set by fallback (not explicit cue)
 
     for ent in doc.ents:
         if ent.label_ not in ("GPE", "LOC"):
             continue
 
         city = ent.text.strip()
-        # Look at the token immediately before the entity for cue words
+        # Look at tokens before the entity for cue words
         prev_tokens = {t.text.lower() for t in doc[max(0, ent.start - 3): ent.start]}
 
         is_origin = bool(prev_tokens & ORIGIN_CUES)
         is_dest   = bool(prev_tokens & DEST_CUES)
 
-        if is_origin and not origin:
-            origin = city
-        elif is_dest and not destination:
-            destination = city
+        if is_origin:
+            # Explicit origin cue always wins — if destination was set by fallback
+            # from this same city, clear it so it can be reassigned as origin
+            if destination == city and dest_by_fallback:
+                destination      = None
+                dest_by_fallback = False
+            if not origin:
+                origin = city
+        elif is_dest:
+            # Explicit destination cue always overrides a fallback-assigned destination
+            destination      = city
+            dest_by_fallback = False
         elif not destination:
-            # fallback: first unassigned city → destination
-            destination = city
+            # Fallback: first untagged city becomes destination tentatively
+            destination      = city
+            dest_by_fallback = True
 
     return origin, destination
 
