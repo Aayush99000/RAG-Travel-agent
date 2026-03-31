@@ -1,14 +1,14 @@
 """
-Itinerary generation using a locally running Ollama LLM (Llama 3).
+Itinerary generation using a locally running Ollama LLM (Qwen 3).
 
 Pipeline position:
   slot_filler → mood_mapper → retriever → [generator]
 
 How it works:
-  1. Builds a structured system prompt describing the task and constraints.
-  2. Injects the RAG context (venues, reviews, tips, reference plans) from retriever.py.
-  3. Sends the prompt to Ollama running locally (no API key needed).
-  4. Supports multi-turn refinement — conversation history is maintained and
+  1. Builds a structured system prompt describing the task and constraints,
+     with real venue data injected directly from the RAG retriever.
+  2. Sends the prompt to Ollama running locally (no API key needed).
+  3. Supports multi-turn refinement — conversation history is maintained and
      follow-up edits ("make Day 2 more relaxed") are handled in context.
 """
 
@@ -28,8 +28,8 @@ from pipeline.retriever   import RetrievedContext
 
 OLLAMA_MODEL    = "qwen3:1.7b"
 OLLAMA_BASE_URL = "http://localhost:11434"
-TEMPERATURE     = 0.7        # slight creativity for itinerary variety
-MAX_TOKENS      = 8000       # enough for a complete 7-day itinerary
+TEMPERATURE     = 0.7
+MAX_TOKENS      = 8000
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ MAX_TOKENS      = 8000       # enough for a complete 7-day itinerary
 
 @dataclass
 class GeneratorResult:
-    itinerary: str                              # the generated itinerary text
+    itinerary: str
     history:   list[SystemMessage | HumanMessage | AIMessage] = field(default_factory=list)
 
     def __str__(self) -> str:
@@ -46,87 +46,213 @@ class GeneratorResult:
 
 
 # ---------------------------------------------------------------------------
-# Prompt builders
+# Prompt builder
 # ---------------------------------------------------------------------------
 
-def _build_system_prompt(slots: TripSlots) -> str:
-    """
-    Build the system prompt that sets constraints and output format.
-    This stays fixed across multi-turn refinements.
-    """
+def _format_retrieved_venues(context: RetrievedContext) -> str:
+    """Format RAG context for injection into the system prompt."""
+    if not context.venues and not context.tips and not context.reviews:
+        return "No specific venue data retrieved — use your best local knowledge for this destination."
+
+    lines: list[str] = []
+
+    if context.venues:
+        lines.append("VENUES:")
+        for v in context.venues:
+            meta = v.get("metadata", {})
+            lines.append(
+                f"  • {meta.get('name', 'Unknown')} | {meta.get('city', '')} | "
+                f"{meta.get('categories', '')} | "
+                f"★ {meta.get('stars', '?')} ({meta.get('review_count', 0)} reviews)"
+            )
+
+    if context.tips:
+        lines.append("\nVENUE TIPS:")
+        for t in context.tips:
+            lines.append(f"  • {t.get('document', '')}")
+
+    if context.reviews:
+        lines.append("\nREVIEWS:")
+        for r in context.reviews:
+            meta  = r.get("metadata", {})
+            stars = meta.get("stars", "?")
+            text  = r.get("document", "")[:150]
+            lines.append(f"  • [{stars}★] {text}")
+
+    if context.reference_plans:
+        lines.append("\nREFERENCE ITINERARIES:")
+        for p in context.reference_plans:
+            meta = p.get("metadata", {})
+            lines.append(
+                f"  • {meta.get('days', '?')}-day trip to {meta.get('dest', '?')} "
+                f"from {meta.get('org', '?')} | Query: {meta.get('query', '')}"
+            )
+
+    return "\n".join(lines)
+
+
+def _build_system_prompt(
+    slots: TripSlots,
+    context: RetrievedContext,
+    traveler_str: str = "solo traveler",
+    dietary_str:  str = "none",
+    fitness_str:  str = "moderate",
+) -> str:
     budget_str    = f"${slots.budget:,.0f}" if slots.budget else "unspecified"
     transport_str = slots.transport or "any"
-    origin_str    = f" from {slots.origin}" if slots.origin else ""
+    origin_str    = slots.origin or "origin city"
     moods_str     = ", ".join(slots.moods) if slots.moods else "general travel"
     days_str      = str(slots.days) if slots.days else "a few"
     dest_str      = slots.destination or "the destination"
 
-    return f"""You are NLPilot, an expert travel planner. Your job is to create a detailed, \
-day-by-day travel itinerary that is grounded in real venue data.
+    # Dates
+    arrival_date   = slots.start_date or "Day 1"
+    if slots.start_date and slots.days:
+        try:
+            from datetime import datetime, timedelta
+            arr = datetime.strptime(slots.start_date, "%B %d")
+            dep = arr + timedelta(days=slots.days - 1)
+            departure_date = dep.strftime("%B %d")
+        except Exception:
+            departure_date = f"Day {slots.days}"
+    else:
+        departure_date = f"Day {slots.days}" if slots.days else "last day"
 
-TRIP DETAILS:
-- Destination  : {dest_str}{origin_str}
-- Duration     : {days_str} days
-- Total Budget : {budget_str}
-- Transport    : {transport_str}
-- Mood/Vibe    : {moods_str}
+    retrieved_venues = _format_retrieved_venues(context)
 
-CRITICAL TRANSPORT RULES:
-- The origin city ({slots.origin or "origin"}) is ONLY where the traveler is flying FROM. It is NOT part of the itinerary.
-- NEVER suggest transport between {slots.origin or "origin"} and {dest_str} inside the daily activities. That is a flight handled separately.
-- Transport tips in each day MUST only describe LOCAL travel within {dest_str} (e.g. metro, bus, taxi, walking — all within the destination city only).
-- NEVER write things like "Metro from [origin] to [destination]" or "Flight from X to Y" inside daily activities.
+    return f"""\
+You are NLPilot, an expert local travel planner with deep knowledge of {dest_str}. \
+Your job is to create a hyper-personalized, realistic, day-by-day travel itinerary \
+grounded entirely in the real venue data provided below.
 
-RULES YOU MUST FOLLOW:
-1. Generate ALL {days_str} days — do NOT stop early or cut the itinerary short. Every single day must be fully written out.
-2. Each day must have Morning, Afternoon, and Evening slots.
-3. ALL venues and activities MUST be located in {dest_str}. Do NOT include venues from other cities.
-4. If a venue has free entry, still estimate realistic costs for food, drinks, or local transport (~$5-15 per ride within the city).
-5. Every activity MUST have a non-zero cost estimate — include food, drinks, local transport fares, tips, and entry fees.
-6. Daily subtotal MUST be the sum of all activity costs for that day. Never write $0.
-7. Grand total MUST equal the sum of all daily subtotals and must be close to {budget_str}.
-8. Transport tips MUST show travel between consecutive venues (e.g. "from [Venue A] to [Venue B]") — never from the origin city. Use realistic local fares within {dest_str} (metro ~$2-5, taxi ~$10-20, walking ~$0).
-9. Keep the vibe consistent with: {moods_str}.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRIP DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Destination     : {dest_str}
+- Flying From     : {origin_str} (origin — NOT part of the itinerary)
+- Arrival Date    : {arrival_date}
+- Departure Date  : {departure_date}
+- Duration        : {days_str} days
+- Total Budget    : {budget_str}
+- Transport       : {transport_str}
+- Mood / Vibe     : {moods_str}
+- Travelers       : {traveler_str}
+- Dietary Needs   : {dietary_str}
+- Fitness Level   : {fitness_str}
 
-OUTPUT FORMAT (follow exactly):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BUDGET BREAKDOWN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Distribute the total budget of {budget_str} across these categories:
+- Accommodation  : ~35% of total budget
+- Food & Drinks  : ~30% of total budget
+- Activities     : ~20% of total budget
+- Local Transport: ~15% of total budget
+
+Use this breakdown to size daily costs realistically.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REAL VENUE DATA (use ONLY these venues)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The following venues have been retrieved from our database for {dest_str}.
+You MUST prioritize these real venues. Do NOT invent venues not listed here.
+
+{retrieved_venues}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRANSPORT RULES:
+- {origin_str} is ONLY where the traveler flies FROM. Never include it in daily activities.
+- NEVER suggest transport between {origin_str} and {dest_str} inside daily plans.
+- All transport tips must describe LOCAL travel within {dest_str} ONLY.
+- Use realistic local fares: metro ~$2-5, taxi/rideshare ~$10-20, walking ~$0.
+
+VENUE RULES:
+- ALL venues must be located in {dest_str}. No venues from other cities.
+- Respect dietary needs: {dietary_str}. Never recommend restaurants that conflict with these.
+- Respect fitness level: {fitness_str}. Avoid strenuous hikes for low fitness.
+- Provide ONE backup option per day in case a venue is unexpectedly closed.
+
+COST RULES:
+- Every activity MUST have a non-zero cost estimate including food, drinks, transport, tips.
+- Daily subtotal MUST be the sum of all activity costs + transport for that day.
+- Grand total MUST equal the sum of all daily subtotals and stay within {budget_str}.
+
+ITINERARY RULES:
+- Generate ALL {days_str} days — never stop early or skip a day.
+- Each day MUST have Breakfast, Morning, Lunch, Afternoon, Evening, and Dinner slots.
+- Assign a unique mood-aligned theme to each day (e.g. "Day 1: Art & Culture").
+- Last day ({departure_date}) must account for checkout time and travel to airport — \
+keep it light with morning activities only and no evening plans.
+- Keep the overall vibe consistent with: {moods_str}.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACCOMMODATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Recommend ONE hotel or accommodation in {dest_str} that fits the budget and mood.
+Format:
+**Recommended Stay:** [Hotel Name] — [brief reason] (~$[nightly rate]/night × {days_str} nights = ~$[total])
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT (follow exactly for every day)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Recommended Stay:** [Hotel Name] — [reason] (~$[nightly rate]/night)
+
 ---
-## Day 1: [Theme]
+## Day [N]: [Mood-Aligned Theme]
+
+**Breakfast**
+- [Meal] at [Venue Name] — [brief description] (~$[cost])
+
 **Morning**
 - [Activity] at [Venue Name] — [brief description] (~$[cost])
+- Getting there: [transport] from [Hotel or prev venue] to [Venue Name] (~$[fare])
+
+**Lunch**
+- [Meal] at [Venue Name] — [brief description] (~$[cost])
+- Getting there: [transport] from [Morning venue] to [Lunch venue] (~$[fare])
 
 **Afternoon**
 - [Activity] at [Venue Name] — [brief description] (~$[cost])
-- Getting there: [transport mode] from [Morning venue name] to [Afternoon venue name] (~$[local fare])
+- Getting there: [transport] from [Lunch venue] to [Afternoon venue] (~$[fare])
 
 **Evening**
 - [Activity] at [Venue Name] — [brief description] (~$[cost])
-- Getting there: [transport mode] from [Afternoon venue name] to [Evening venue name] (~$[local fare])
+- Getting there: [transport] from [Afternoon venue] to [Evening venue] (~$[fare])
 
-**Daily Subtotal: ~$[sum of all costs above including transport fares]**
+**Dinner**
+- [Meal] at [Venue Name] — [brief description] (~$[cost])
+- Getting there: [transport] from [Evening venue] to [Dinner venue] (~$[fare])
 
+⚠️ **Backup Option:** If [primary venue] is closed, visit [alternative venue] instead.
+
+**Daily Subtotal: ~$[sum of all costs above]**
+  - Accommodation : ~$[nightly rate]
+  - Food          : ~$[food total]
+  - Activities    : ~$[activity total]
+  - Transport     : ~$[transport total]
 ---
-(repeat for each day)
 
+(repeat for all {days_str} days)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRIP SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **TOTAL ESTIMATED COST: ~$[sum of all daily subtotals]**
+  - Accommodation  : ~$[total]
+  - Food & Drinks  : ~$[total]
+  - Activities     : ~$[total]
+  - Local Transport: ~$[total]
 
-TIPS: [2-3 practical travel tips for this trip]
+**PRACTICAL TIPS:**
+1. [Local customs / etiquette tip — e.g. tipping culture, dress codes]
+2. [Transport tip — e.g. best metro card to buy, rideshare apps that work locally]
+3. [Safety or timing tip — e.g. neighborhoods to avoid at night, rush hour times]
+4. [Money tip — e.g. best places to exchange currency, ATM fees]
+5. [Packing tip — relevant to activities and mood e.g. walking shoes, layers]
 """
-
-
-def _build_user_prompt(context: RetrievedContext) -> str:
-    """Build the first human turn — includes the RAG context."""
-    context_text = context.to_prompt_text()
-    if context_text.strip():
-        return (
-            "Using the venue data and reference itineraries below, "
-            "generate the complete day-by-day itinerary.\n\n"
-            f"{context_text}"
-        )
-    return (
-        "No specific venue data was retrieved for this destination. "
-        "Generate the best itinerary you can based on general knowledge, "
-        "staying within the constraints defined."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -152,31 +278,38 @@ def generate_itinerary(
     slots: TripSlots,
     context: RetrievedContext,
     model: str = OLLAMA_MODEL,
+    traveler_str: str = "solo traveler",
+    dietary_str:  str = "none",
+    fitness_str:  str = "moderate",
 ) -> GeneratorResult:
     """
     Generate a full day-by-day itinerary from slots + RAG context.
 
     Args:
-        slots:   Structured trip slots from slot_filler.fill_slots()
-        context: Retrieved venue/plan context from retriever.retrieve()
-        model:   Ollama model to use (default: llama3)
+        slots:        Structured trip slots from slot_filler.fill_slots()
+        context:      Retrieved venue/plan context from retriever.retrieve()
+        model:        Ollama model to use
+        traveler_str: Group description (e.g. "couple", "family of 4")
+        dietary_str:  Dietary restrictions (e.g. "vegetarian", "none")
+        fitness_str:  Fitness level ("low", "moderate", "high")
 
     Returns:
         GeneratorResult with itinerary text and conversation history
     """
     llm = _get_llm()
 
-    system_msg = SystemMessage(content=_build_system_prompt(slots))
-    user_msg   = HumanMessage(content=_build_user_prompt(context))
+    system_msg = SystemMessage(
+        content=_build_system_prompt(slots, context, traveler_str, dietary_str, fitness_str)
+    )
+    user_msg = HumanMessage(content="Generate the complete itinerary now.")
 
-    messages   = [system_msg, user_msg]
+    messages = [system_msg, user_msg]
 
     print(f"[Generator] Calling Ollama ({model}) …")
-    response   = llm.invoke(messages)
-    itinerary  = response.content.strip()
+    response  = llm.invoke(messages)
+    itinerary = response.content.strip()
 
-    # Append AI response to history for multi-turn
-    history    = messages + [AIMessage(content=itinerary)]
+    history = messages + [AIMessage(content=itinerary)]
 
     return GeneratorResult(itinerary=itinerary, history=history)
 
@@ -191,8 +324,6 @@ def refine_itinerary(
     Args:
         user_feedback:   Natural language refinement request
                          e.g. "Make Day 3 more relaxed"
-                              "Swap the museum on Day 1 with something outdoors"
-                              "I'm on a tighter budget, cut costs where possible"
         previous_result: The GeneratorResult from a previous generate/refine call
 
     Returns:
@@ -201,14 +332,13 @@ def refine_itinerary(
     llm      = _get_llm()
     messages = previous_result.history + [HumanMessage(content=user_feedback)]
 
-    print(f"[Generator] Refining itinerary …")
+    print("[Generator] Refining itinerary …")
     response  = llm.invoke(messages)
     itinerary = response.content.strip()
 
-    history   = messages + [AIMessage(content=itinerary)]
+    history = messages + [AIMessage(content=itinerary)]
 
     return GeneratorResult(itinerary=itinerary, history=history)
-
 
 
 if __name__ == "__main__":
