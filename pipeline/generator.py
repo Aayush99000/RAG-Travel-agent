@@ -85,23 +85,24 @@ RULES YOU MUST FOLLOW:
 5. Every activity MUST have a non-zero cost estimate — include food, drinks, local transport fares, tips, and entry fees.
 6. Daily subtotal MUST be the sum of all activity costs for that day. Never write $0.
 7. Grand total MUST equal the sum of all daily subtotals and must be close to {budget_str}.
-8. Local transport mode within {dest_str} must match: {transport_str}.
+8. Transport tips MUST show travel between consecutive venues (e.g. "from [Venue A] to [Venue B]") — never from the origin city. Use realistic local fares within {dest_str} (metro ~$2-5, taxi ~$10-20, walking ~$0).
 9. Keep the vibe consistent with: {moods_str}.
 
 OUTPUT FORMAT (follow exactly):
 ---
 ## Day 1: [Theme]
 **Morning**
-- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
-- Local Transport: [how to get there within {dest_str} only] (~$[fare])
+- [Activity] at [Venue Name] — [brief description] (~$[cost])
 
 **Afternoon**
-- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
+- [Activity] at [Venue Name] — [brief description] (~$[cost])
+- Getting there: [transport mode] from [Morning venue name] to [Afternoon venue name] (~$[local fare])
 
 **Evening**
-- [Activity] at [Venue Name], {dest_str} — [brief description] (~$[cost])
+- [Activity] at [Venue Name] — [brief description] (~$[cost])
+- Getting there: [transport mode] from [Afternoon venue name] to [Evening venue name] (~$[local fare])
 
-**Daily Subtotal: ~$[sum of all costs above]**
+**Daily Subtotal: ~$[sum of all costs above including transport fares]**
 
 ---
 (repeat for each day)
