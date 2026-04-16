@@ -92,9 +92,13 @@ cd RAG-Travel-agent
 ### **2. Create a Virtual Environment**
 
 ```bash
-python -m venv venv
-MAC: source venv/bin/activate
-Windows: venv\Scripts\activate
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
 ```
 
 ### **3. Install Dependencies**
