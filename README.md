@@ -84,15 +84,17 @@ User Input (Natural Language / Form)
 ### **1. Clone the Repository**
 
 ```bash
-git clone https://github.com/Aayush99000/NLPilot.git
-cd NLPilot
+git clone https://github.com/Aayush99000/RAG-Travel-agent
+ls
+cd RAG-Travel-agent
 ```
 
 ### **2. Create a Virtual Environment**
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+MAC: source venv/bin/activate
+Windows: venv\Scripts\activate
 ```
 
 ### **3. Install Dependencies**
