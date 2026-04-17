@@ -9,6 +9,9 @@ chromadb
 
 # Embeddings
 sentence-transformers
+transformers
+torch
+torchvision
 
 # NLP / NER
 spacy
