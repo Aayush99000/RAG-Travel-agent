@@ -1,6 +1,6 @@
 # **NLPilot 🧳✈️**
 
-> An NLP-powered travel planner that converts your preferences — destination, budget, mood, dates, and transport — into a personalized day-by-day itinerary. Built with a fully local RAG pipeline (Ollama + Llama 3 + ChromaDB), semantic mood-to-activity mapping, and real venue data from the Yelp Open Dataset. No API keys required — runs entirely on your machine.
+> An NLP-powered travel planner that converts your preferences — destination, budget, mood, dates, and transport — into a personalized day-by-day itinerary. Built with a fully local RAG pipeline (Ollama + qwen3:4b + ChromaDB), semantic mood-to-activity mapping, and real venue data from the Yelp Open Dataset. No API keys required — runs entirely on your machine.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python)
 ![LangChain](https://img.shields.io/badge/LangChain-0.1+-green?style=flat-square)
