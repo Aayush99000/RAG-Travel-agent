@@ -143,10 +143,6 @@ def map_moods(moods: list[str], top_k: int = 3) -> list[str]:
 def map_moods_with_scores(moods: list[str], top_k: int = 3) -> list[tuple[str, float]]:
     """
     Same as map_moods but returns (category, score) tuples for inspection/debugging.
-
-    Example:
-        map_moods_with_scores(["chill", "nature"])
-        → [("parks_nature", 0.82), ("spas_wellness", 0.71), ...]
     """
     if not moods:
         return []

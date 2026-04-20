@@ -208,26 +208,13 @@ def ingest_travelplanner(data_dir: Path, client: chromadb.Client, ef) -> None:
         records = _load_jsonl(src)
 
         for i, r in enumerate(tqdm(records, desc=f"  {split}", unit=" rows")):
-            query    = (r.get("query") or "").strip()
-            ref_info = (r.get("reference_information") or "").strip()
-
-            if not query:
+            doc = json.dumps(r)
+            if not doc.strip():
                 continue
-
-            # Embed query + reference_information together so semantic search
-            # on a user's trip request retrieves relevant reference plans.
-            doc = f"Query: {query}\nReference: {ref_info}" if ref_info else query
 
             ids.append(f"{split}_{i}")
             documents.append(doc)
-            metadatas.append({
-                "split":  split,
-                "org":    str(r.get("org") or ""),
-                "dest":   str(r.get("dest") or ""),
-                "days":   str(r.get("days") or ""),
-                "level":  str(r.get("level") or ""),
-                "query":  query,
-            })
+            metadatas.append({"split": split})
 
     _upsert_batched(collection, ids, documents, metadatas)
 

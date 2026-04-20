@@ -1,22 +1,12 @@
 """
 RAG retrieval layer for NLPilot.
-
-Queries ChromaDB collections with the structured trip slots and mapped
-activity categories to fetch grounding context for itinerary generation.
-
-Collections queried:
-  - yelp_venues       : relevant places in the destination city
-  - yelp_reviews      : quality signals for top venues
-  - yelp_tips         : concise venue notes
-  - travelplanner     : reference itineraries for similar trips
-
-Pipeline position:
-  slot_filler  →  mood_mapper  →  [retriever]  →  generator
-
+Optimized for minimal context size — sends only what the LLM needs.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,116 +15,96 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 
 from pipeline.slot_filler import TripSlots
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
-VECTORSTORE_DIR  = "vectorstore"
-EMBEDDING_MODEL  = "all-MiniLM-L6-v2"
+VECTORSTORE_DIR = "vectorstore"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+N_TIPS          = 10
 
-# How many results to pull from each collection
-N_VENUES         = 8
-N_REVIEWS        = 5
-N_TIPS           = 5
-N_REFERENCE_PLANS = 2
+# Category queries for diverse retrieval
+CATEGORY_QUERIES = {
+    "EAT":   ("restaurants, cafes, brunch, dining, food", 4),
+    "VISIT": ("museums, art galleries, parks, landmarks, gardens", 3),
+    "TOUR":  ("tours, sightseeing, walking tours", 1),
+    "DRINK": ("bars, breweries, cocktail lounges", 1),
+    "SHOP":  ("shopping, markets, stores, boutiques", 1),
+}
+# Total: 10 venues
 
-
-# ---------------------------------------------------------------------------
-# Result container
-# ---------------------------------------------------------------------------
 
 @dataclass
 class RetrievedContext:
     venues:          list[dict] = field(default_factory=list)
-    reviews:         list[dict] = field(default_factory=list)
     tips:            list[dict] = field(default_factory=list)
-    reference_plans: list[dict] = field(default_factory=list)
+    retrieval_log:   list[str]  = field(default_factory=list)
 
     def summary(self) -> str:
-        return (
-            f"RetrievedContext(\n"
-            f"  venues          = {len(self.venues)}\n"
-            f"  reviews         = {len(self.reviews)}\n"
-            f"  tips            = {len(self.tips)}\n"
-            f"  reference_plans = {len(self.reference_plans)}\n"
-            f")"
-        )
+        return f"RetrievedContext(venues={len(self.venues)}, tips={len(self.tips)})"
 
     def to_prompt_text(self) -> str:
-        """
-        Format all retrieved context into a single string block
-        ready to be injected into the LLM prompt.
-        """
-        sections: list[str] = []
+        """Minimal context for LLM — short venue lines with inline tips."""
+        if not self.venues:
+            return ""
 
-        # ── Venues ────────────────────────────────────────────────────────
-        if self.venues:
-            lines = ["=== VENUES ==="]
-            for v in self.venues:
-                meta = v.get("metadata", {})
-                lines.append(
-                    f"• {meta.get('name', 'Unknown')} | {meta.get('city', '')} | "
-                    f"{meta.get('categories', '')} | "
-                    f"★ {meta.get('stars', '?')} ({meta.get('review_count', 0)} reviews)"
-                )
-            sections.append("\n".join(lines))
+        # Build tip lookup
+        tip_lookup: dict[str, str] = {}
+        for t in self.tips:
+            bid = t.get("metadata", {}).get("business_id", "")
+            if bid and bid not in tip_lookup:
+                tip_lookup[bid] = t.get("document", "")[:80]
 
-        # ── Tips ──────────────────────────────────────────────────────────
-        if self.tips:
-            lines = ["=== VENUE TIPS ==="]
-            for t in self.tips:
-                lines.append(f"• {t.get('document', '')}")
-            sections.append("\n".join(lines))
+        lines = ["VENUES:"]
+        for i, v in enumerate(self.venues, 1):
+            meta = v.get("metadata", {})
+            name = meta.get("name", "Unknown")
+            cats = meta.get("categories", "")
+            stars = meta.get("stars", "?")
+            bid = meta.get("business_id", "")
+            action = _classify_venue(cats)
 
-        # ── Reviews ───────────────────────────────────────────────────────
-        if self.reviews:
-            lines = ["=== REVIEWS ==="]
-            for r in self.reviews:
-                meta = r.get("metadata", {})
-                stars = meta.get("stars", "?")
-                text  = r.get("document", "")[:150]   # truncate long reviews
-                lines.append(f"• [{stars}★] {text}")
-            sections.append("\n".join(lines))
+            line = f"[{i}] {name} ({action}) - {cats[:60]}. {stars} stars."
+            tip = tip_lookup.get(bid, "")
+            if tip:
+                line += f' Tip: "{tip}"'
+            lines.append(line)
 
-        # ── Reference itineraries ─────────────────────────────────────────
-        if self.reference_plans:
-            lines = ["=== REFERENCE ITINERARIES ==="]
-            for p in self.reference_plans:
-                meta = p.get("metadata", {})
-                lines.append(
-                    f"• {meta.get('days', '?')}-day trip to {meta.get('dest', '?')} "
-                    f"from {meta.get('org', '?')}\n"
-                    f"  Query: {meta.get('query', '')}"
-                )
-            sections.append("\n".join(lines))
+        return "\n".join(lines)
 
-        return "\n\n".join(sections)
+
+def _classify_venue(categories: str) -> str:
+    cats = categories.lower() if categories else ""
+    if any(w in cats for w in ["restaurant", "food", "cafe", "coffee", "bakery",
+                                "breakfast", "brunch", "pizza", "seafood", "sandwich"]):
+        return "EAT"
+    if any(w in cats for w in ["bar", "pub", "brewery", "cocktail", "wine", "nightlife"]):
+        return "DRINK"
+    if any(w in cats for w in ["tour", "sightseeing"]):
+        return "TOUR"
+    if any(w in cats for w in ["museum", "art", "gallery", "historic", "landmark", "park", "garden"]):
+        return "VISIT"
+    if any(w in cats for w in ["shopping", "market", "store", "shop", "boutique"]):
+        return "SHOP"
+    return "VISIT"
 
 
 # ---------------------------------------------------------------------------
-# ChromaDB client — singleton
+# ChromaDB client
 # ---------------------------------------------------------------------------
 
-_client: chromadb.PersistentClient | None = None
-_ef: SentenceTransformerEmbeddingFunction | None = None
+_client = None
+_ef = None
 
-
-def _get_client(vectorstore_dir: str = VECTORSTORE_DIR):
+def _get_client(vectorstore_dir=VECTORSTORE_DIR):
     global _client, _ef
     if _client is None:
         path = Path(vectorstore_dir)
         if not path.exists():
-            raise FileNotFoundError(
-                f"Vector store not found at '{path.resolve()}'. "
-                "Run:  python pipeline/ingest_chromadb.py --data_dir data/processed"
-            )
-        _ef     = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
+            raise FileNotFoundError(f"Vector store not found at '{path.resolve()}'.")
+        _ef = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
         _client = chromadb.PersistentClient(path=str(path))
     return _client, _ef
 
-
-def _safe_get_collection(client, name: str, ef):
-    """Return collection or None if it doesn't exist yet."""
+def _safe_get(client, name, ef):
     try:
         return client.get_collection(name, embedding_function=ef)
     except Exception:
@@ -142,191 +112,138 @@ def _safe_get_collection(client, name: str, ef):
 
 
 # ---------------------------------------------------------------------------
-# Query builders
+# Main retrieval
 # ---------------------------------------------------------------------------
-
-def _venue_query(slots: TripSlots, categories: list[str]) -> str:
-    """Build a semantic query string for venue retrieval."""
-    cat_text  = ", ".join(categories[:5]) if categories else "attractions"
-    mood_text = ", ".join(slots.moods[:4]) if slots.moods else ""
-    dest      = slots.destination or "the destination"
-    parts = [f"{cat_text} in {dest}"]
-    if mood_text:
-        parts.append(f"for a traveler who enjoys {mood_text}")
-    if slots.transport:
-        parts.append(f"accessible by {slots.transport}")
-    return " ".join(parts)
-
-
-def _plan_query(slots: TripSlots) -> str:
-    """Build a semantic query string for TravelPlanner retrieval."""
-    dest   = slots.destination or "a city"
-    days   = slots.days or "a few"
-    budget = f"${slots.budget:.0f}" if slots.budget else "a moderate budget"
-    moods  = ", ".join(slots.moods[:3]) if slots.moods else "general sightseeing"
-    return (
-        f"{days}-day trip to {dest} with {budget} budget, "
-        f"interests: {moods}"
-    )
-
 
 def retrieve(
     slots: TripSlots,
     categories: list[str],
     vectorstore_dir: str = VECTORSTORE_DIR,
+    include_reviews: bool = False,
 ) -> RetrievedContext:
-    """
-    Run RAG retrieval across all ChromaDB collections.
-
-    Args:
-        slots:           Structured trip slots from slot_filler.fill_slots()
-        categories:      Activity category names from mood_mapper.map_moods()
-        vectorstore_dir: Path to the ChromaDB persistent store
-
-    Returns:
-        RetrievedContext with venues, reviews, tips, and reference plans
-    """
     client, ef = _get_client(vectorstore_dir)
-    context    = RetrievedContext()
+    context = RetrievedContext()
+    dest_lower = (slots.destination or "").lower().strip()
+    dest = slots.destination or "the city"
+    moods = ", ".join(slots.moods[:3]) if slots.moods else ""
 
-    venue_q = _venue_query(slots, categories)
-    plan_q  = _plan_query(slots)
+    # Dynamic venue allocation: mood-driven + scaled by trip length
+    days = slots.days or 3
+    total_venues = min(days * 3, 10)
 
-    # ── Yelp venues ───────────────────────────────────────────────────────
-    venues_col = _safe_get_collection(client, "yelp_venues", ef)
+    # Map mood_mapper categories to retriever groups
+    MOOD_TO_GROUP = {
+        "restaurants": "EAT", "cafes": "EAT",
+        "bars_nightlife": "DRINK",
+        "museums_galleries": "VISIT", "parks_nature": "VISIT",
+        "hiking_adventure": "VISIT", "beaches": "VISIT",
+        "spas_wellness": "VISIT", "sports_fitness": "VISIT",
+        "shopping": "SHOP",
+        "landmarks_tours": "TOUR", "entertainment": "DRINK",
+    }
+
+    # Count how many mapped categories fall into each group
+    group_weight = {"EAT": 1, "VISIT": 1, "TOUR": 0, "DRINK": 0, "SHOP": 0}
+    for cat in categories:
+        group = MOOD_TO_GROUP.get(cat, "VISIT")
+        group_weight[group] = group_weight.get(group, 0) + 1
+
+    # Distribute slots proportionally, minimum 1 for EAT and VISIT
+    total_weight = max(sum(group_weight.values()), 1)
+    venue_slots = {}
+    allocated = 0
+    for group in ["EAT", "VISIT", "TOUR", "DRINK", "SHOP"]:
+        w = group_weight.get(group, 0)
+        if w > 0:
+            n = max(1, round(total_venues * w / total_weight))
+            venue_slots[group] = n
+            allocated += n
+
+    # Adjust if over/under allocated
+    while allocated > total_venues:
+        # Remove from the group with the most slots
+        biggest = max(venue_slots, key=venue_slots.get)
+        venue_slots[biggest] -= 1
+        allocated -= 1
+    while allocated < total_venues:
+        # Add to EAT (always useful)
+        venue_slots["EAT"] = venue_slots.get("EAT", 0) + 1
+        allocated += 1
+
+    # ── Venues: diverse category retrieval ────────────────────────────
+    venues_col = _safe_get(client, "yelp_venues", ef)
     if venues_col:
-        # Try city-filtered search first, fall back to semantic-only if no results
-        results = None
-        if slots.destination:
-            try:
-                results = venues_col.query(
-                    query_texts=[venue_q],
-                    n_results=N_VENUES,
-                    where={"city": {"$eq": slots.destination}},
-                    include=["documents", "metadatas", "distances"],
-                )
-                # If no results with exact city match, try without filter
-                if not results.get("documents", [[]])[0]:
-                    results = None
-            except Exception:
-                results = None
+        seen_ids = set()
 
-        if results is None:
-            results = venues_col.query(
-                query_texts=[venue_q],
-                n_results=N_VENUES,
-                include=["documents", "metadatas", "distances"],
-            )
+        for cat_group, (cat_desc, _) in CATEGORY_QUERIES.items():
+            n_slots = venue_slots.get(cat_group, 0)
+            if n_slots == 0:
+                continue
 
-        docs      = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-        distances = results.get("distances", [[]])[0]
+            query = f"{cat_desc} in {dest}"
+            if moods:
+                query += f" {moods}"
 
-        context.venues = [
-            {"document": d, "metadata": m, "distance": dist}
-            for d, m, dist in zip(docs, metadatas, distances)
-        ]
-    else:
-        print("[Retriever] 'yelp_venues' collection not found — skipping.")
+            results = None
+            if dest_lower:
+                for city_filter in [
+                    {"city_lower": {"$eq": dest_lower}},
+                    {"city": {"$eq": slots.destination}},
+                    {"city": {"$eq": slots.destination.title() if slots.destination else ""}},
+                ]:
+                    try:
+                        results = venues_col.query(
+                            query_texts=[query],
+                            n_results=n_slots + 3,
+                            where=city_filter,
+                            include=["documents", "metadatas", "distances"],
+                        )
+                        if results.get("documents", [[]])[0]:
+                            break
+                        results = None
+                    except Exception:
+                        results = None
 
-    # ── Yelp tips ─────────────────────────────────────────────────────────
-    tips_col = _safe_get_collection(client, "yelp_tips", ef)
+            if results is None:
+                # City not in dataset — skip this category, don't fall back to random cities
+                continue
+
+            if results:
+                docs = results.get("documents", [[]])[0]
+                metas = results.get("metadatas", [[]])[0]
+                dists = results.get("distances", [[]])[0]
+                added = 0
+                for d, m, dist in zip(docs, metas, dists):
+                    if added >= n_slots:
+                        break
+                    bid = m.get("business_id", "")
+                    if bid in seen_ids:
+                        continue
+                    seen_ids.add(bid)
+                    context.venues.append({"document": d, "metadata": m, "distance": dist})
+                    added += 1
+
+        if context.venues:
+            context.retrieval_log.append(f"Retrieved {len(context.venues)} venues across {len(CATEGORY_QUERIES)} categories.")
+        else:
+            context.retrieval_log.append(f"No venues found for {dest}.")
+
+    # ── Tips: match to retrieved venues ───────────────────────────────
+    tips_col = _safe_get(client, "yelp_tips", ef)
     if tips_col and context.venues:
-        # Fetch tips for the top venue business IDs
-        top_bids = [
-            v["metadata"].get("business_id", "")
-            for v in context.venues[:8]
-            if v["metadata"].get("business_id")
-        ]
-        if top_bids:
+        bids = [v["metadata"].get("business_id", "") for v in context.venues if v["metadata"].get("business_id")]
+        if bids:
             try:
                 results = tips_col.query(
-                    query_texts=[venue_q],
+                    query_texts=[f"tips for venues in {dest}"],
                     n_results=N_TIPS,
-                    where={"business_id": {"$in": top_bids}},
+                    where={"business_id": {"$in": bids}},
                     include=["documents", "metadatas"],
                 )
-                docs      = results.get("documents", [[]])[0]
-                metadatas = results.get("metadatas", [[]])[0]
-                context.tips = [
-                    {"document": d, "metadata": m}
-                    for d, m in zip(docs, metadatas)
-                ]
-            except Exception:
-                pass
-    else:
-        if not tips_col:
-            print("[Retriever] 'yelp_tips' collection not found — skipping.")
-
-    # ── Yelp reviews ──────────────────────────────────────────────────────
-    reviews_col = _safe_get_collection(client, "yelp_reviews", ef)
-    if reviews_col and context.venues:
-        top_bids = [
-            v["metadata"].get("business_id", "")
-            for v in context.venues[:5]
-            if v["metadata"].get("business_id")
-        ]
-        if top_bids:
-            try:
-                results = reviews_col.query(
-                    query_texts=[venue_q],
-                    n_results=N_REVIEWS,
-                    where={"business_id": {"$in": top_bids}},
-                    include=["documents", "metadatas"],
-                )
-                docs      = results.get("documents", [[]])[0]
-                metadatas = results.get("metadatas", [[]])[0]
-                context.reviews = [
-                    {"document": d, "metadata": m}
-                    for d, m in zip(docs, metadatas)
-                ]
-            except Exception:
-                pass
-    else:
-        if not reviews_col:
-            print("[Retriever] 'yelp_reviews' collection not found — skipping.")
-
-    # ── TravelPlanner reference plans ─────────────────────────────────────
-    tp_col = _safe_get_collection(client, "travelplanner", ef)
-    if tp_col:
-        results = tp_col.query(
-            query_texts=[plan_q],
-            n_results=N_REFERENCE_PLANS,
-            include=["documents", "metadatas", "distances"],
-        )
-
-        docs      = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-        distances = results.get("distances", [[]])[0]
-
-        context.reference_plans = [
-            {"document": d, "metadata": m, "distance": dist}
-            for d, m, dist in zip(docs, metadatas, distances)
-        ]
-    else:
-        print("[Retriever] 'travelplanner' collection not found — skipping.")
+                docs = results.get("documents", [[]])[0]
+                metas = results.get("metadatas", [[]])[0]
+                context.tips = [{"document": d, "metadata": m} for d, m in zip(docs, metas)]
+            except Exception as e:
+                logger.warning(f"Tips query failed: {e}")
 
     return context
-
-
-if __name__ == "__main__":
-    from pipeline.slot_filler import fill_slots
-    from pipeline.mood_mapper import map_moods
-
-    query = (
-        "I'm flying from San Francisco to New York for 5 days "
-        "with a $2,000 budget. I prefer public transport and I'm "
-        "in the mood for art, local food, and some chill walks."
-    )
-
-    slots      = fill_slots(query)
-    categories = map_moods(slots.moods, top_k=3)
-
-    print("Slots     :", slots)
-    print("Categories:", categories)
-    print()
-
-    context = retrieve(slots, categories)
-    print(context.summary())
-    print()
-    print(context.to_prompt_text()[:1000], "...")

@@ -65,22 +65,84 @@ TRANSPORT_KEYWORDS: dict[str, str] = {
     "bicycle":          "cycling",
 }
 
-MOOD_KEYWORDS: list[str] = [
-    "adventure", "adventurous",
-    "chill", "relaxed", "relaxing", "laid-back", "slow",
-    "foodie", "food", "cuisine", "eating", "dining", "local food", "street food",
-    "art", "arts", "museum", "galleries", "cultural", "culture", "history", "historical",
-    "nightlife", "bars", "clubs", "party", "drinking",
-    "nature", "outdoors", "hiking", "trekking", "parks", "scenic",
-    "beach", "ocean", "coast", "seaside", "surf",
-    "shopping", "markets", "boutiques",
-    "romantic", "couples",
-    "family", "kid-friendly", "kids",
-    "spiritual", "temples", "churches", "wellness",
-    "photography", "scenic views", "architecture",
-    "music", "concerts", "live music",
-    "sports", "active", "fitness",
-]
+# ---------------------------------------------------------------------------
+# Mood keywords → canonical form
+# ---------------------------------------------------------------------------
+# Maps raw keyword (matched in text) → canonical mood string (passed to mood_mapper).
+# Multi-word moods are preserved as meaningful phrases, not split.
+
+MOOD_KEYWORD_MAP: dict[str, str] = {
+    # Adventure
+    "adventure":     "adventure",
+    "adventurous":   "adventure",
+    # Relaxation
+    "chill":         "chill",
+    "relaxed":       "relaxing",
+    "relaxing":      "relaxing",
+    "laid-back":     "relaxing",
+    "slow":          "relaxing",
+    # Food
+    "foodie":        "food",
+    "food":          "food",
+    "cuisine":       "cuisine",
+    "eating":        "food",
+    "dining":        "dining",
+    "local food":    "local food",
+    "street food":   "street food",
+    # Arts & Culture
+    "art":           "art",
+    "arts":          "art",
+    "museum":        "museum",
+    "galleries":     "galleries",
+    "cultural":      "culture",
+    "culture":       "culture",
+    "history":       "history",
+    "historical":    "history",
+    # Nightlife
+    "nightlife":     "nightlife",
+    "bars":          "bars",
+    "clubs":         "clubs",
+    "party":         "party",
+    "drinking":      "nightlife",
+    # Nature & Outdoors
+    "nature":        "nature",
+    "outdoors":      "outdoors",
+    "hiking":        "hiking",
+    "trekking":      "hiking",
+    "parks":         "parks",
+    "scenic":        "scenic views",
+    # Beach
+    "beach":         "beach",
+    "ocean":         "ocean",
+    "coast":         "coastal",
+    "seaside":       "beach",
+    "surf":          "surfing",
+    # Shopping
+    "shopping":      "shopping",
+    "markets":       "markets",
+    "boutiques":     "shopping",
+    # Wellness
+    "romantic":      "romantic",
+    "couples":       "romantic",
+    "family":        "family-friendly",
+    "kid-friendly":  "family-friendly",
+    "kids":          "family-friendly",
+    "spiritual":     "spiritual",
+    "temples":       "temples",
+    "churches":      "churches",
+    "wellness":      "wellness",
+    # Entertainment
+    "photography":   "photography",
+    "scenic views":  "scenic views",
+    "architecture":  "architecture",
+    "music":         "music",
+    "concerts":      "concerts",
+    "live music":    "live music",
+    "jazz":          "jazz",
+    "sports":        "sports",
+    "active":        "active",
+    "fitness":       "fitness",
+}
 
 # Text fragments that hint a city is the ORIGIN (not destination)
 ORIGIN_CUES = {"from", "form", "fron", "departing", "leaving", "flying from", "traveling from", "starting from"}
@@ -156,19 +218,15 @@ def _extract_cities(doc) -> tuple[str | None, str | None]:
         is_dest   = bool(prev_tokens & DEST_CUES)
 
         if is_origin:
-            # Explicit origin cue always wins — if destination was set by fallback
-            # from this same city, clear it so it can be reassigned as origin
             if destination == city and dest_by_fallback:
                 destination      = None
                 dest_by_fallback = False
             if not origin:
                 origin = city
         elif is_dest:
-            # Explicit destination cue always overrides a fallback-assigned destination
             destination      = city
             dest_by_fallback = False
         elif not destination:
-            # Fallback: first untagged city becomes destination tentatively
             destination      = city
             dest_by_fallback = True
 
@@ -176,19 +234,12 @@ def _extract_cities(doc) -> tuple[str | None, str | None]:
 
 
 def _extract_days(text: str, doc) -> int | None:
-    """
-    Extract trip duration in days via:
-      - regex: "5 days", "a week", "two weeks", "10-day"
-      - spaCy DATE entities containing day/week counts
-    """
     text_lower = text.lower()
 
-    # Explicit day count: "5 days", "5-day"
     m = re.search(r"(\d+)\s*[-\s]?days?", text_lower)
     if m:
         return int(m.group(1))
 
-    # Week expressions
     m = re.search(r"(\d+)\s*weeks?", text_lower)
     if m:
         return int(m.group(1)) * 7
@@ -197,7 +248,6 @@ def _extract_days(text: str, doc) -> int | None:
     if re.search(r"\btwo\s+weeks?\b", text_lower):
         return 14
 
-    # spaCy DATE entities — e.g. "for a week", "for 3 nights"
     for ent in doc.ents:
         if ent.label_ == "DATE":
             m = re.search(r"(\d+)\s*nights?", ent.text.lower())
@@ -208,19 +258,12 @@ def _extract_days(text: str, doc) -> int | None:
 
 
 def _extract_budget(text: str, doc) -> float | None:
-    """
-    Extract budget via:
-      - spaCy MONEY entities
-      - regex: "$2,000", "2000 dollars", "USD 1500", "1.5k"
-    """
     text_lower = text.lower()
 
-    # "1.5k" or "2k" — check BEFORE spaCy MONEY to avoid "$1.5" capturing before "k"
     m = re.search(r"\$?([\d.]+)\s*k\b", text_lower)
     if m:
         return float(m.group(1)) * 1000
 
-    # spaCy MONEY
     for ent in doc.ents:
         if ent.label_ == "MONEY":
             raw = re.sub(r"[^\d.]", "", ent.text.replace(",", ""))
@@ -229,12 +272,10 @@ def _extract_budget(text: str, doc) -> float | None:
             except ValueError:
                 continue
 
-    # $1,500 or $1500
     m = re.search(r"\$([\d,]+(?:\.\d+)?)", text)
     if m:
         return float(m.group(1).replace(",", ""))
 
-    # "1500 dollars / USD"
     m = re.search(r"([\d,]+(?:\.\d+)?)\s*(?:dollars?|usd|bucks?)", text_lower)
     if m:
         return float(m.group(1).replace(",", ""))
@@ -243,9 +284,7 @@ def _extract_budget(text: str, doc) -> float | None:
 
 
 def _extract_transport(text: str) -> str | None:
-    """Match transport keywords against the lowercased input (longest match wins)."""
     text_lower = text.lower()
-    # Sort by length descending so multi-word phrases match before single words
     for phrase in sorted(TRANSPORT_KEYWORDS, key=len, reverse=True):
         if phrase in text_lower:
             return TRANSPORT_KEYWORDS[phrase]
@@ -253,14 +292,19 @@ def _extract_transport(text: str) -> str | None:
 
 
 def _extract_moods(text: str) -> list[str]:
-    """Return all mood keywords found in the text (deduplicated, order-preserved)."""
+    """
+    Return canonical mood labels found in the text.
+    Multi-word keywords matched first (longest match wins).
+    Deduplicates by canonical form.
+    """
     text_lower = text.lower()
     seen: set[str] = set()
     found: list[str] = []
-    for kw in MOOD_KEYWORDS:
-        if kw in text_lower and kw not in seen:
-            # Normalise multi-word synonyms to canonical form
-            canonical = kw.split()[0] if len(kw.split()) > 1 else kw
+
+    # Sort by keyword length descending so multi-word matches take priority
+    for kw in sorted(MOOD_KEYWORD_MAP, key=len, reverse=True):
+        if kw in text_lower:
+            canonical = MOOD_KEYWORD_MAP[kw]
             if canonical not in seen:
                 found.append(canonical)
                 seen.add(canonical)
@@ -268,11 +312,9 @@ def _extract_moods(text: str) -> list[str]:
 
 
 def _extract_start_date(doc) -> str | None:
-    """Extract a specific start date if mentioned (e.g. 'March 15', 'next Friday')."""
     for ent in doc.ents:
         if ent.label_ == "DATE":
             text = ent.text.lower()
-            # Skip vague durations like "5 days", "a week"
             if re.search(r"\d+\s*-?\s*days?|\d+\s*weeks?|a week|weekend", text):
                 continue
             return ent.text

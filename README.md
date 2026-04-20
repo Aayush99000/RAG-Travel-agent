@@ -10,11 +10,11 @@
 
 ---
 
-## **📌 Overview**
+## **Overview**
 
 NLPilot takes the hassle out of travel planning. Instead of spending hours researching places, manually budgeting, and building day schedules — just describe your trip in natural language and NLPilot generates a complete, grounded itinerary tailored to you.
 
-> ⚙️ **Fully Local** — No API keys, no cloud services, no internet required after setup. Every component runs on your machine.
+> **Fully Local** — No API keys, no cloud services, no internet required after setup. Every component runs on your machine.
 
 **Example Input:**
 
@@ -27,7 +27,7 @@ A full 5-day itinerary with morning/afternoon/evening slots, real venue recommen
 
 ---
 
-## **🧠 NLP Pipeline**
+## **NLP Pipeline**
 
 ```
 User Input (Natural Language / Form)
@@ -41,7 +41,7 @@ User Input (Natural Language / Form)
   RAG Retrieval (ChromaDB + Yelp Open Dataset)
   [local vector store — no API needed]
         ↓
-  Itinerary Generation (Ollama — Llama 3 local)
+  Itinerary Generation (Ollama — qwen3:4b local)
   [constraint-aware, structured prompting]
         ↓
   Multi-turn Refinement
@@ -52,23 +52,23 @@ User Input (Natural Language / Form)
 
 ---
 
-## **✨ Features**
+## **Features**
 
-- 🗓️ **Day-by-day itinerary generation** from natural language or form input
-- 🎭 **Mood-to-activity mapping** — maps vague descriptors like _"chill"_ or _"adventurous"_ to concrete activity categories using sentence embeddings
-- 📍 **Real venue recommendations** grounded via Yelp Open Dataset loaded into ChromaDB
-- 💰 **Budget & transport constraint enforcement** — stays within your limits
-- 💬 **Multi-turn refinement** — tweak your plan conversationally (e.g., _"make Day 3 less packed"_)
-- 🔍 **RAG-powered grounding** to minimize hallucinations
-- 🔒 **Fully local** — no API keys, no cloud dependencies
+- **Day-by-day itinerary generation** from natural language or form input
+- **Mood-to-activity mapping** — maps vague descriptors like _"chill"_ or _"adventurous"_ to concrete activity categories using sentence embeddings
+- **Real venue recommendations** grounded via Yelp Open Dataset loaded into ChromaDB
+- **Budget & transport constraint enforcement** — stays within your limits
+- **Multi-turn refinement** — tweak your plan conversationally (e.g., _"make Day 3 less packed"_)
+- **RAG-powered grounding** to minimize hallucinations
+- **Fully local** — no API keys, no cloud dependencies
 
 ---
 
-## **🛠️ Tech Stack**
+## **Tech Stack**
 
 | **Layer**     | **Tool**                      |
 | ------------- | ----------------------------- |
-| LLM           | Llama 3 via Ollama (local)    |
+| LLM           | qwen3:4b via Ollama (local)   |
 | Orchestration | LangChain                     |
 | Vector Store  | ChromaDB (local)              |
 | Embeddings    | sentence-transformers (local) |
@@ -79,7 +79,7 @@ User Input (Natural Language / Form)
 
 ---
 
-## **🚀 Getting Started**
+## **Getting Started**
 
 ### **1. Clone the Repository**
 
@@ -107,15 +107,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### **4. Install Ollama & Pull Llama 3**
+### **4. Install Ollama & Pull qwen3:4b**
 
 ```bash
 # Install Ollama from https://ollama.com
 # Then pull the model — this is a one-time download (~4.7 GB)
-ollama pull llama3
+ollama pull qwen3:4b
 ```
 
-> 💡 Make sure Ollama is running in the background before starting the app:
+> Make sure Ollama is running in the background before starting the app (open in another terminal on your IDE):
 >
 > ```bash
 > ollama serve
@@ -127,21 +127,24 @@ ollama pull llama3
 - Fill in the short form and download the `.tar` file
 - Extract and place the JSON files in `data/raw/yelp/`
 
-### **6. Download TravelPlanner Dataset**
+### **6. Download TravelPlanner Datasets**
 
-```bash
-# Download directly using wget
-wget -P data/raw/travelplanner/ https://huggingface.co/datasets/osunlp/TravelPlanner/resolve/main/train/train.jsonl
-wget -P data/raw/travelplanner/ https://huggingface.co/datasets/osunlp/TravelPlanner/resolve/main/validation/validation.jsonl
-```
+- Go to 🔗 [travelplannertrain.com/dataset](https://huggingface.co/datasets/osunlp/TravelPlanner/blob/main/train_ref_info.jsonl)
+- Go to 🔗 [travelplannervalidation.com/dataset](https://huggingface.co/datasets/osunlp/TravelPlanner/blob/main/validation_ref_info.jsonl)
+
 
 ### **7. Preprocess the Datasets**
 
+> Ensure datasets are placed in:
+> - `data/raw/yelp/`
+> - `data/raw/travelplanner/`
+
 ```bash
+# Full setup (Yelp + TravelPlanner)
 python data/fetch_datasets.py \
     --yelp_dir data/raw/yelp \
     --travelplanner_dir data/raw/travelplanner \
-    --output_dir data/processed
+    --output_dir data/
 ```
 
 ### **8. Ingest into ChromaDB**
@@ -158,11 +161,15 @@ streamlit run app.py
 
 ---
 
-## **📁 Project Structure**
+## **Project Structure**
 
 ```
 NLPilot/
 ├── app.py                        # Streamlit frontend
+├── inspect_vectorstore.py       # Utility to inspect contents of ChromaDB
+├── transform_vectorstore.py     # Utilities for modifying / transforming vector data
+├── evaluate.py                  # Evaluation script for system performance
+├── evaluation_results.json      # Stored evaluation outputs / metrics
 ├── assets/
 │   └── demo.png                  # Demo image for README
 ├── pipeline/
@@ -193,17 +200,7 @@ NLPilot/
 | Python    | 3.10+                   | 3.11+         |
 | OS        | Windows / macOS / Linux | macOS / Linux |
 
-> 💡 Llama 3 8B requires at least 8 GB RAM to run locally via Ollama.
-
----
-
-## **📊 Evaluation**
-
-NLPilot is evaluated on:
-
-- **Constraint Satisfaction Rate** — how well the itinerary respects budget and transport inputs
-- **BERTScore** — semantic similarity of generated itineraries vs. reference travel blogs
-- **Human Preference Scoring** — user ratings on relevance, coherence, and personalization
+> qwen3:4 8B requires at least 8 GB RAM to run locally via Ollama.
 
 ---
 
@@ -213,7 +210,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ---
 
-## **🙋 Authors**
+## **Authors**
 
-**Aayush** — MS Data Science, Northeastern University  
-**Kaushal** — MS Data Science, Northeastern University
+**Aayush Katoch** — MS Data Science, Northeastern University  
+**Kaushal Nair** — MS Data Science, Northeastern University

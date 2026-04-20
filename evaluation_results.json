@@ -1,0 +1,68 @@
+{
+  "summary": {
+    "total_tests": 2,
+    "avg_grounding_rate": 0.39,
+    "avg_constraint_satisfaction": 0.5
+  },
+  "results": [
+    {
+      "query": "I'm flying from San Francisco to Philadelphia for 3 days with a $500 budget. I prefer public transport and I'm in the mood for art, local food, and some chill walks.",
+      "expected_city": "Philadelphia",
+      "expected_days": 3,
+      "expected_budget": 500,
+      "venues_retrieved": 9,
+      "grounding": {
+        "retrieved_count": 9,
+        "grounded_count": 7,
+        "grounding_rate": 0.78,
+        "grounded_venues": [
+          "eat caf\u00e9",
+          "museum restaurant",
+          "city food tours",
+          "philadelphia museum of art",
+          "museum tower market",
+          "philly foodies tours",
+          "the market"
+        ]
+      },
+      "constraints": {
+        "city_mentioned": true,
+        "day_count_correct": true,
+        "budget_referenced": true,
+        "days_found": 3,
+        "dollar_amounts_found": 26
+      },
+      "hallucination": {
+        "is_refusal": false,
+        "venue_count": 9
+      },
+      "constraint_score": 1.0,
+      "time_seconds": 1449.9
+    },
+    {
+      "query": "I'm flying from Boston to Nashville for 2 days with a $800 budget. I love music, bars, and BBQ.",
+      "expected_city": "Nashville",
+      "expected_days": 2,
+      "expected_budget": 800,
+      "venues_retrieved": 0,
+      "grounding": {
+        "retrieved_count": 0,
+        "grounded_count": 0,
+        "grounding_rate": 0,
+        "grounded_venues": []
+      },
+      "constraints": {
+        "city_mentioned": false,
+        "day_count_correct": false,
+        "budget_referenced": false,
+        "days_found": 0
+      },
+      "hallucination": {
+        "is_refusal": true,
+        "venue_count": 0
+      },
+      "constraint_score": 0.0,
+      "time_seconds": 1.3
+    }
+  ]
+}
