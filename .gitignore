@@ -208,6 +208,9 @@ __marimo__/
 
 # Large dataset files — run data/fetch_datasets.py locally to generate these
 data/processed/
+data/raw/yelp/
+data/raw/
+data/raw/travelplanner/
 Yelp JSON/
 TravelPlanner/
 *.jsonl

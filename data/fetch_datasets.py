@@ -16,7 +16,7 @@ Usage:
   python data/fetch_datasets.py \
       --yelp_dir /path/to/yelp_dataset \
       --travelplanner_dir /path/to/travelplanner \
-      --output_dir data/processed
+      --output_dir data/processed   
 
 Requirements:
   pip install tqdm
@@ -194,11 +194,11 @@ TRAVELPLANNER_FIELDS = [
 
 
 def _write_records(rows: list, out_file: Path, label: str) -> None:
-    """Write a list of dicts to a JSONL file, keeping only TRAVELPLANNER_FIELDS."""
+    """Write rows to JSONL without dropping fields (robust to schema differences)."""
     with out_file.open("w", encoding="utf-8") as fout:
         for row in tqdm(rows, desc=f"  {label}", unit=" rows"):
-            record = {k: row.get(k) for k in TRAVELPLANNER_FIELDS if k in row}
-            fout.write(json.dumps(record) + "\n")
+            # Keep full row to avoid losing data due to schema mismatch
+            fout.write(json.dumps(row) + "\n")
     print(f"[TravelPlanner] ✓ {label} → {out_file} ({len(rows):,} rows)")
 
 
