@@ -166,10 +166,10 @@ streamlit run app.py
 ```
 NLPilot/
 ├── app.py                        # Streamlit frontend
-├── inspect_vectorstore.py       # Utility to inspect contents of ChromaDB
-├── transform_vectorstore.py     # Utilities for modifying / transforming vector data
-├── evaluate.py                  # Evaluation script for system performance
-├── evaluation_results.json      # Stored evaluation outputs / metrics
+├── inspect_vectorstore.py        # Utility to inspect contents of ChromaDB
+├── transform_vectorstore.py      # Utilities for modifying / transforming vector data
+├── evaluate.py                   # Evaluation script for system performance
+├── evaluation_results.json       # Stored evaluation outputs / metrics
 ├── assets/
 │   └── demo.png                  # Demo image for README
 ├── pipeline/
@@ -185,6 +185,11 @@ NLPilot/
 │   │   └── travelplanner/        # Raw TravelPlanner JSONL files
 │   └── processed/                # Cleaned JSONL files ready for ingestion
 ├── vectorstore/                  # ChromaDB persistent local vector store
+├── deployment/
+│   ├── DEPLOYMENT.md             # Cloud & Docker deployment instructions
+│   ├── docker_run.sh             # Docker build/run helper script
+│   ├── gcp_run_commands.sh       # GCP VM setup & run commands
+│   └── nlpilot.dockerfile        # Dockerfile for containerized deployment
 ├── requirements.txt
 └── README.md
 ```
